@@ -118,7 +118,7 @@ def manual_input_prediction_fn(hand: Hand, num_players: int, num_cards_per_playe
 def manual_card_selection_fn(hand: Hand, trump_suit: Suit, player: int, num_players: int, num_cards_per_players: int, cards_this_trick: list[Card], round_history: list[tuple[int, list[Card]]]) -> Card:
     initial_card = cards_this_trick[0] if len(cards_this_trick) > 0 else None
     while True:
-        card_to_place = str_to_card(input(f'Player {player}, what card to place? Your hand is {hand} '))
+        card_to_place = str_to_card(input(f'Player {player}, what card to place? Your hand is {str(hand)} '))
         if card_to_place is not None and is_valid_move(initial_card, card_to_place, hand):
             return card_to_place
         print(f'Placing card {card_to_place} is illegal, input another card')
@@ -167,6 +167,7 @@ def play_round(num_players: int, num_cards_per_player: int, deck: Deck, input_pr
                 winning_card, winning_player = card_to_place, player
 
         #edge case where everyone plays jester - last player wins
+        #? I thought it would still be first player wins?
         if winning_card is None: winning_card, winning_player = Card(Face.JESTER, Suit.DIAMOND), (round_+num_players-1)%num_players
         print(f'Player {winning_player} placed {winning_card} to take the trick')
         tricks_taken[winning_player] += 1
