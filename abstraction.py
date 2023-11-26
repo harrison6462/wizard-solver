@@ -1,7 +1,7 @@
 from typing import Callable
 from pyemd import emd
 import numpy as np
-import wizard
+import old_wizard_not_open_spiel as wizard
 import itertools
 from nltk.cluster import KMeansClusterer, euclidean_distance
 import time
@@ -512,9 +512,10 @@ if __name__== "__main__":
     test_deck_3 = set([wizard.Card(wizard.Face.TWO, wizard.Suit.DIAMOND), wizard.Card(wizard.Face.THREE, wizard.Suit.DIAMOND), wizard.Card(wizard.Face.FOUR, wizard.Suit.DIAMOND), wizard.Card(wizard.Face.FIVE, wizard.Suit.DIAMOND),
                      wizard.Card(wizard.Face.TWO, wizard.Suit.HEART), wizard.Card(wizard.Face.THREE, wizard.Suit.HEART), wizard.Card(wizard.Face.FOUR, wizard.Suit.HEART), wizard.Card(wizard.Face.FIVE, wizard.Suit.HEART),
                      wizard.Card(wizard.Face.TWO, wizard.Suit.SPADE), wizard.Card(wizard.Face.THREE, wizard.Suit.SPADE), wizard.Card(wizard.Face.FOUR, wizard.Suit.SPADE), wizard.Card(wizard.Face.FIVE, wizard.Suit.SPADE),
+                     wizard.Card(wizard.Face.JESTER, wizard.Suit.SPADE), wizard.Card(wizard.Face.JESTER, wizard.Suit.HEART), wizard.Card(wizard.Face.WIZARD, wizard.Suit.SPADE), wizard.Card(wizard.Face.WIZARD, wizard.Suit.HEART)
                      ])
     
-    num_clusters = 10
+    num_clusters = 20
     hand_num_cards = 3
     clusters = distr_abstraction(num_clusters, hand_num_cards, test_deck_3, wizard.Suit.DIAMOND)
 
