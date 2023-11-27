@@ -67,6 +67,7 @@ def get_all_histories_and_reach_probabilities(game, policies: list[Policy], play
             game_root.apply_action(action)
         sum_of_reach_probs += joint_prob
         reach_probs.append((len(reach_probs), joint_prob))
+    return all_hands, reach_probs, sum_of_reach_probs
 
 #It appears that open spiel best response maximizes CBR so i will assume this
 def unsafe_subgame_solve(cfr_policy: Policy, player: int, subgame_root_state : WizardState) -> str:
@@ -91,7 +92,7 @@ def unsafe_subgame_solve(cfr_policy: Policy, player: int, subgame_root_state : W
     best_response_policy: Policy = BestResponsePolicy(game, 1-player, cfr_policy)
     
     policies = [cfr_policy, best_response_policy] if player == 0 else [best_response_policy, cfr_policy]
-    all_hands, reach_probs = get_all_histories_and_reach_probabilities(game, policies, player, subgame_root_state)
+    all_hands, reach_probs, sum_of_reach_probs = get_all_histories_and_reach_probabilities(game, policies, player, subgame_root_state)
     class WizardSubgame(pyspiel.Game):
         def __init__(self, params=None):
             super().__init__(_GAME_TYPE, _GAME_INFO, params or dict())
@@ -132,6 +133,11 @@ def unsafe_subgame_solve(cfr_policy: Policy, player: int, subgame_root_state : W
             else:
                 assert not super().is_chance_node()
                 super()._apply_action(action)
+        
+        def returns(self):
+            #because we normalize the probability of reaching at the start, for consistentency we need to re-normalize
+            return [sum_of_reach_probs * payout for payout in super().returns()]
+
     #now, reach_probs is a dictionary from product of hands to joint_prob; so, we can make our game now
     name = f'unsafe_wizard_solve_{str(subgame_root_state)}_player_{player}'
     _GAME_TYPE = pyspiel.GameType(
@@ -178,7 +184,7 @@ def resolve_subgame_solve(cfr_policy: Policy, player: int, subgame_root_state: W
     best_response_policy: Policy = BestResponsePolicy(game, 1-player, cfr_policy)
     policies = [cfr_policy, best_response_policy] if player == 0 else [best_response_policy, cfr_policy]
 
-    all_hands, reach_probs = get_all_histories_and_reach_probabilities(game, policies, player, subgame_root_state, set([player]))
+    all_hands, reach_probs, sum_of_reach_probs = get_all_histories_and_reach_probabilities(game, policies, player, subgame_root_state, set([1-player]))
     class WizardSubgame(pyspiel.Game):
         def __init__(self, params=None):
             super().__init__(_GAME_TYPE, _GAME_INFO, params or dict())
@@ -233,8 +239,9 @@ def resolve_subgame_solve(cfr_policy: Policy, player: int, subgame_root_state: W
                     super()._apply_action(action)
         
         def returns(self):
-            if self.subgame_payout is not None: return [self.subgame_payout, -self.subgame_payout] if player == 0 else [-self.subgame_payout, self.subgame_payout]
-            return super().returns()
+            if self.subgame_payout is not None: res = [self.subgame_payout, -self.subgame_payout] if player == 0 else [-self.subgame_payout, self.subgame_payout]
+            else: res = super().returns()
+            return [payout * sum_of_reach_probs for payout in res]
 
     #now, reach_probs is a dictionary from product of hands to joint_prob; so, we can make our game now
     name = f'resolve_wizard_solve_{str(subgame_root_state)}_player_{player}'
@@ -289,7 +296,6 @@ def maxmargin_subgame_solve(cfr_policy: Policy, player: int, subgame_root_state:
     best_response_policy: Policy = BestResponsePolicy(game, 1-player, cfr_policy)
     policies = [cfr_policy, best_response_policy] if player == 0 else [best_response_policy, cfr_policy]
 
-    #we now use 1 - player because our chance nodes will now decide the 
     all_hands, reach_probs = get_all_histories_and_reach_probabilities(game, policies, 1-player, subgame_root_state, players_to_exclude=set([1-player]))
     class WizardSubgame(pyspiel.Game):
         def __init__(self, params=None):

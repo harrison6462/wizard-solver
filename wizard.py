@@ -176,7 +176,7 @@ def int_to_card(i: int) -> Card:
   return Card(faces[((i-2)//2+Face.KING.value)], suits[i%2])
 
 def card_to_action(c: Card) -> int:
-  return int_to_card(c) + _NUM_CARDS_PER_PLAYER + 1
+  return card_to_int(c) + _NUM_CARDS_PER_PLAYER + 1
 
 def action_to_card(a: int) -> Card:
   return int_to_card(a - _NUM_CARDS_PER_PLAYER - 1)
@@ -277,7 +277,7 @@ class WizardState(pyspiel.State):
     if self.current_lead_suit is None: return sorted(map(lambda c: _NUM_CARDS_PER_PLAYER+1+card_to_int(c), self.player_hands[player]))
     
     #otherwise, it's just our list of legal moves
-    return sorted(map(lambda c: card_to_int(c)+_NUM_CARDS_PER_PLAYER+1, get_all_valid_moves(self.player_hands[player], Card(Face.TWO, self.current_lead_suit))))
+    return sorted(map(lambda c: card_to_action(c), get_all_valid_moves(self.player_hands[player], Card(Face.TWO, self.current_lead_suit))))
 
   def chance_outcomes(self):
     """Returns the possible chance outcomes and their probabilities."""
@@ -286,6 +286,7 @@ class WizardState(pyspiel.State):
       #make the player hands
       outcomes = range(max_chance_actions) #generate_all_possible_hands(_NUM_PLAYERS, _NUM_CARDS_PER_PLAYER, _DECK)
     else:
+      assert _NUM_CARDS_PER_PLAYER * _NUM_PLAYERS < len(_DECK)
       outcomes = sorted(map(lambda c: max_chance_actions + card_to_int(c), _DECK - set().union(*self.player_hands)))
     p = 1.0 / len(outcomes)
     #because this needs to go to the C++ API, we can only pass ints, so pass an int and we'll use thathand
@@ -364,9 +365,9 @@ class WizardState(pyspiel.State):
       return -10 * abs(self.tricks_per_player[i] - self.predictions[i]) 
     if _NUM_PLAYERS != 2: raise Exception('Currently, only two players are supported for 0 sum')
     r0,r1 = reward_for_player(0), reward_for_player(1)
-    if r0 > r1: return [r0, -r0]
+    if r0 > r1: return [r0-r1, -(r0-r1)]
     elif r0 == r1: return [0, 0]
-    else: return [-r1, r1]
+    else: return [-(r1-r0), (r1-r0)]
 #    return [reward_for_player(i) for i in range(_NUM_PLAYERS)]
 
   def __str__(self):
