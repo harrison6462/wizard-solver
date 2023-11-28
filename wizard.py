@@ -266,7 +266,7 @@ class WizardState(pyspiel.State):
       return self._next_player
 
   def is_chance_node(self):
-    return len(self.player_hands) == 0 or (len(self.predictions) == _NUM_PLAYERS and self.trump_card is None and _NUM_PLAYERS * _NUM_CARDS_PER_PLAYER < len(_DECK))
+    return len(self.player_hands) == 0 or (self.trump_card is None and _NUM_PLAYERS * _NUM_CARDS_PER_PLAYER < len(_DECK))
     
   def _legal_actions(self, player) -> list[BetAction | CardAction]:
     """Returns a list of legal actions."""
