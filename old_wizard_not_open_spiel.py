@@ -77,9 +77,10 @@ def get_cmp_from_trump_and_initial_suit(trump: Suit | None, initial_suit: Suit |
     '''
     def cmp(c1: Card, c2: Card) -> bool:
         if c2.face == Face.WIZARD: return False
-        elif c1.face == c2.face == Face.JESTER: return True
+        elif c1.face == c2.face == Face.JESTER: return False
         elif c1.face == Face.WIZARD: return True
-        elif c2.face == Face.JESTER: return False
+        elif c2.face == Face.JESTER: return True
+        elif c1.face == Face.JESTER: return False
 
         return (c1.suit == trump and (c2.suit != trump or c1.face.value > c2.face.value)) \
             or (c1.suit == initial_suit and (c2.suit != trump and (c2.suit != initial_suit or c1.face.value > c2.face.value))) \
