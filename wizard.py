@@ -339,7 +339,7 @@ class WizardState(pyspiel.State):
           self.current_round_cards = []
           self.who_started_tricks.append(self._next_player)
         else: self._next_player = (self._next_player + 1) % _NUM_PLAYERS
-
+     
   def _action_to_string(self, player, action):
     """Action -> string."""
     if player == pyspiel.PlayerId.CHANCE:
@@ -359,9 +359,10 @@ class WizardState(pyspiel.State):
     """Total reward for each player over the course of the game so far."""
     if not self.is_terminal():
       return [0. for i in range(_NUM_PLAYERS)]
-    assert all(map(lambda hand: len(hand) == 1, self.player_hands))
-    for i in range(self._next_player, self._next_player + _NUM_PLAYERS):
-      self._apply_action(card_to_int(self.player_hands[i % _NUM_PLAYERS].__iter__().__next__()) + _NUM_CARDS_PER_PLAYER + 1)
+    # if not all(map(lambda hand: len(hand) == 0, self.player_hands)): breakpoint()
+    assert all(map(lambda hand: len(hand) == 0, self.player_hands))
+    # for i in range(self._next_player, self._next_player + _NUM_PLAYERS):
+    #   self._apply_action(card_to_int(self.player_hands[i % _NUM_PLAYERS].__iter__().__next__()) + _NUM_CARDS_PER_PLAYER + 1)
     def reward_for_player(i: int):
       if self.tricks_per_player[i] == self.predictions[i]: return 20 + 10 * self.tricks_per_player[i]
       return -10 * abs(self.tricks_per_player[i] - self.predictions[i]) 

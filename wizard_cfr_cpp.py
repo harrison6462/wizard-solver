@@ -33,7 +33,9 @@ def main(_):
   game = pyspiel.load_game(
       FLAGS.game,
   )
+  print("loaded game\n")
 
+  s = time.time()
   solver = None
   if FLAGS.solver == "cfr":
     solver = pyspiel.CFRSolver(game)
@@ -44,6 +46,8 @@ def main(_):
   else:
     print("Unknown solver")
     sys.exit(0)
+  e = time.time()
+  print(f"created solver in {e-s} seconds\n")
 
   for i in range(int(FLAGS.iterations / 2)):
     solver.evaluate_and_update_policy()
@@ -73,4 +77,6 @@ def main(_):
 
 
 if __name__ == "__main__":
+  print(f'standard cfr started at {time.time() - start}\n')
   app.run(main)
+  print(f'standard cfr completed in {time.time() - start} seconds\n')
