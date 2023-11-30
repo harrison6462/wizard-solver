@@ -25,8 +25,8 @@ import wizard
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_enum("solver", "cfr", ["cfr", "cfrplus", "cfrbr"], "CFR solver")
-flags.DEFINE_integer("iterations", 20, "Number of iterations")
+flags.DEFINE_enum("solver", "cfrplus", ["cfr", "cfrplus", "cfrbr"], "CFR solver")
+flags.DEFINE_integer("iterations", 90, "Number of iterations")
 flags.DEFINE_string("game", "python_wizard", "Name of the game")
 
 def main(_):
@@ -50,7 +50,7 @@ def main(_):
     print("Iteration {} exploitability: {:.6f}".format(
         i, pyspiel.exploitability(game, solver.average_policy())))
 
-  filename = "/tmp/{}_solver.pickle".format(FLAGS.solver)
+  filename = "{}_solver.pickle".format(FLAGS.solver)
   print("Persisting the model...")
   with open(filename, "wb") as file:
     pickle.dump(solver, file, pickle.HIGHEST_PROTOCOL)
@@ -68,6 +68,8 @@ def main(_):
     print("Iteration {} exploitability: {:.6f}".format(
         int(FLAGS.iterations / 2) + i,
         pyspiel.exploitability(game, loaded_solver.average_policy())))
+  with open(filename, "wb") as file:
+    pickle.dump(solver, file, pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == "__main__":
