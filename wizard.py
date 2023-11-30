@@ -110,10 +110,9 @@ def get_cmp_from_trump_and_initial_suit(trump: Suit | None, initial_suit: Suit |
     '''
     def cmp(c1: Card, c2: Card) -> bool:
         if c2.face == Face.WIZARD: return False
-        elif c1.face == c2.face == Face.JESTER: return False
+        elif c1.face == c2.face == Face.JESTER: return True
         elif c1.face == Face.WIZARD: return True
-        elif c2.face == Face.JESTER: return True
-        elif c1.face == Face.JESTER: return False
+        elif c2.face == Face.JESTER: return False
 
         return (c1.suit == trump and (c2.suit != trump or c1.face.value > c2.face.value)) \
             or (c1.suit == initial_suit and (c2.suit != trump and (c2.suit != initial_suit or c1.face.value > c2.face.value))) \
@@ -177,7 +176,7 @@ def int_to_card(i: int) -> Card:
   return Card(faces[((i-2)//2+Face.KING.value)], suits[i%2])
 
 def card_to_action(c: Card) -> int:
-  return int_to_card(c) + _NUM_CARDS_PER_PLAYER + 1
+  return card_to_int(c) + _NUM_CARDS_PER_PLAYER + 1
 
 def action_to_card(a: int) -> Card:
   return int_to_card(a - _NUM_CARDS_PER_PLAYER - 1)
@@ -255,6 +254,7 @@ class WizardState(pyspiel.State):
     self.trump_card = None
     self._game_over = False
     self._next_player = 0
+    self.rewards = None
 
   def current_player(self):
     """Returns id of the next player to move, or TERMINAL if game is over."""
@@ -278,7 +278,7 @@ class WizardState(pyspiel.State):
     if self.current_lead_suit is None: return sorted(map(lambda c: _NUM_CARDS_PER_PLAYER+1+card_to_int(c), self.player_hands[player]))
     
     #otherwise, it's just our list of legal moves
-    return sorted(map(lambda c: card_to_int(c)+_NUM_CARDS_PER_PLAYER+1, get_all_valid_moves(self.player_hands[player], Card(Face.TWO, self.current_lead_suit))))
+    return sorted(map(lambda c: card_to_action(c), get_all_valid_moves(self.player_hands[player], Card(Face.TWO, self.current_lead_suit))))
 
   def chance_outcomes(self):
     """Returns the possible chance outcomes and their probabilities."""
@@ -287,12 +287,15 @@ class WizardState(pyspiel.State):
       #make the player hands
       outcomes = range(max_chance_actions) #generate_all_possible_hands(_NUM_PLAYERS, _NUM_CARDS_PER_PLAYER, _DECK)
     else:
+      assert _NUM_CARDS_PER_PLAYER * _NUM_PLAYERS < len(_DECK)
       outcomes = sorted(map(lambda c: max_chance_actions + card_to_int(c), _DECK - set().union(*self.player_hands)))
     p = 1.0 / len(outcomes)
     #because this needs to go to the C++ API, we can only pass ints, so pass an int and we'll use thathand
     return [(o, p) for o in outcomes]
 
   def _apply_action(self, action):
+    # print(self._game_over)
+    # if self._game_over: breakpoint()
     """Applies the specified action to the state."""
     if self.is_chance_node():
       #either a chance node is dealing the hands to players or specifying the trump card
@@ -335,7 +338,7 @@ class WizardState(pyspiel.State):
           self.who_started_tricks.append(self._next_player)
         else: self._next_player = (self._next_player + 1) % _NUM_PLAYERS
         #if all players have 1 card left then they must play that card so the game is over
-        if all(map(lambda hand: len(hand) == 1, self.player_hands)):
+        if all(map(lambda hand: len(hand) == 0, self.player_hands)):
           self._game_over = True
 
   def _action_to_string(self, player, action):
@@ -357,17 +360,18 @@ class WizardState(pyspiel.State):
     """Total reward for each player over the course of the game so far."""
     if not self._game_over:
       return [0. for i in range(_NUM_PLAYERS)]
-    assert all(map(lambda hand: len(hand) == 1, self.player_hands))
-    for i in range(self._next_player, self._next_player + _NUM_PLAYERS):
-      self._apply_action(card_to_int(self.player_hands[i % _NUM_PLAYERS].__iter__().__next__()) + _NUM_CARDS_PER_PLAYER + 1)
+    # if not all(map(lambda hand: len(hand) == 0, self.player_hands)): breakpoint()
+    assert all(map(lambda hand: len(hand) == 0, self.player_hands))
+    # for i in range(self._next_player, self._next_player + _NUM_PLAYERS):
+    #   self._apply_action(card_to_int(self.player_hands[i % _NUM_PLAYERS].__iter__().__next__()) + _NUM_CARDS_PER_PLAYER + 1)
     def reward_for_player(i: int):
       if self.tricks_per_player[i] == self.predictions[i]: return 20 + 10 * self.tricks_per_player[i]
       return -10 * abs(self.tricks_per_player[i] - self.predictions[i]) 
     if _NUM_PLAYERS != 2: raise Exception('Currently, only two players are supported for 0 sum')
     r0,r1 = reward_for_player(0), reward_for_player(1)
-    if r0 > r1: return [r0, -r0]
+    if r0 > r1: return [r0-r1, -(r0-r1)]
     elif r0 == r1: return [0, 0]
-    else: return [-r1, r1]
+    else: return [-(r1-r0), (r1-r0)]
 #    return [reward_for_player(i) for i in range(_NUM_PLAYERS)]
 
   def __str__(self):
