@@ -22,7 +22,6 @@ def main():
     if i % 1 == 0:
       conv = exploitability.exploitability(game, cfr_solver.average_policy())
       print("Iteration {} exploitability {}".format(i, conv))
-  with open('strategy.txt', 'w') as f:
-    f.write('\n'.join([str(state) + ' ' + str(cfr_solver.average_policy().action_probabilities(state)) for state in cfr_solver.average_policy().states]))
+  
 if __name__ == '__main__':
     main()
