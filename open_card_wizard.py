@@ -40,53 +40,10 @@ from functools import reduce
 import itertools
 from typing import Callable
 import math
+from copy import copy, deepcopy
+from wizard import *
 
-class Face(Enum):
-    JESTER = 0
-    TWO = 1
-    THREE = 2
-    FOUR = 3
-    FIVE = 4
-    SIX = 5
-    SEVEN = 6
-    EIGHT = 7
-    NINE = 8
-    TEN = 9
-    JACK = 10
-    QUEEN = 11
-    KING = 12
-    ACE = 13
-    WIZARD = 14
 
-class Suit(Enum):
-    CLUB = 0
-    DIAMOND = 1
-    HEART = 2
-    SPADE = 3
-
-face_to_str = ['R', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A', 'W']
-str_to_face: Callable[[str], Face | None] = lambda t: Face(face_to_str.index(t)) if t in face_to_str else None
-suit_to_str = ['C', 'D', 'H', 'S']
-str_to_suit: Callable[[str], Suit | None] = lambda t: Suit(suit_to_str.index(t)) if t in suit_to_str else None
-
-def str_to_card(t: str) -> Card | None:
-    try:
-        face, suit = str_to_face(t[0]), str_to_suit(t[1])
-        if face is None or suit is None: return None
-        return Card(face, suit)
-    except:
-        return None
-
-@dataclass(frozen=True)
-class Card:
-    face: Face
-    suit: Suit | None
-
-    def __str__(self):
-        #open_spiel requires all actions to have distinct names
-        #if self.face == Face.JESTER or self.face == Face.WIZARD: return face_to_str[self.face.value]
-        
-        return f'{face_to_str[self.face.value]}{suit_to_str[self.suit.value]}'
 
 #types
 Hand = set[Card]
@@ -104,50 +61,6 @@ suits = [suit for suit in Suit]
 
 card = tuple[Face, Suit]
 
-def get_cmp_from_trump_and_initial_suit(trump: Suit | None, initial_suit: Suit | None):
-    '''Returns a comparison function that is true iff c1 beats c2, where c2 is the previous winning card this hand
-       with the given trump suit and initial suit (first suit played this round)
-    '''
-    def cmp(c1: Card, c2: Card) -> bool:
-        if c2.face == Face.WIZARD: return False
-        elif c1.face == c2.face == Face.JESTER: return True
-        elif c1.face == Face.WIZARD: return True
-        elif c2.face == Face.JESTER: return False
-
-        return (c1.suit == trump and (c2.suit != trump or c1.face.value > c2.face.value)) \
-            or (c1.suit == initial_suit and (c2.suit != trump and (c2.suit != initial_suit or c1.face.value > c2.face.value))) \
-            or (c2.suit != trump and c2.suit != initial_suit and c1.face.value > c2.face.value)
-    return cmp
-
-def has_card_of_suit(hand: Hand, suit: Suit) -> bool:
-    return any(map(lambda card: card.suit == suit and card.face not in [Face.WIZARD, Face.JESTER], hand))
-
-def is_valid_move(preceeding_card: Card | None, card: Card, hand: Hand) -> bool:
-    return card in hand and (preceeding_card is None \
-                            or card.face in [Face.WIZARD, Face.JESTER] \
-                            or card.suit == preceeding_card.suit \
-                            or not has_card_of_suit(hand, preceeding_card.suit))
-
-def get_all_valid_moves(hand: Hand, preceeding_card: Card):
-    return set(filter(lambda c: is_valid_move(preceeding_card, c, hand), hand))
-
-def generate_hands(num_players: int, num_cards_per_player: int, deck: Deck) -> tuple[list[Hand], OrderedDeck]:
-    assert num_players * num_cards_per_player <= len(deck)
-    permutation = np.random.permutation(list(deck))
-    return [set(permutation[num_cards_per_player * i: num_cards_per_player * (i+1)]) for i in range(num_players)], permutation[num_cards_per_player * num_players:]
-
-def generate_all_possible_hands(num_players: int, num_cards_per_player: int, deck: Deck):
-  from itertools import combinations
-  assert num_players * num_cards_per_player <= len(deck)
-  all_choices = map(lambda s: [list(s)], combinations(deck, num_cards_per_player))
-  for _ in range(num_players-1):
-    new_all_choices = []
-    for choice in all_choices:
-      all_cards_in_choice = set().union(*map(lambda s: set(s), choice))
-      deck_without_choices = _DECK.difference(all_cards_in_choice)
-      new_all_choices.extend([choice + [list(combo)] for combo in combinations(deck_without_choices,num_cards_per_player)])
-    all_choices = new_all_choices
-  return all_choices
 
 #the possible types of actions
 BetAction = int
@@ -157,32 +70,24 @@ _NUM_PLAYERS = 2
 _NUM_CARDS_PER_PLAYER = 2
 #wizards / jesters will have club/diamond/heart/spade variety - these will have no impact
 #_DECK = frozenset(map(lambda face_and_suit: Card(*face_and_suit), itertools.product(faces, suits)))
-_DECK = frozenset(map(lambda face_and_suit: Card(*face_and_suit), itertools.product([Face.JESTER, Face.KING, Face.ACE, Face.WIZARD], [Suit.CLUB, Suit.DIAMOND])))
+_DECK = frozenset(map(lambda face_and_suit: Card(*face_and_suit), itertools.product([Face.JESTER,  Face.KING,Face.ACE, Face.WIZARD], [Suit.CLUB, Suit.DIAMOND])))
 #TODO this is an important function, perhaps more attention should be drawn to it
 # def card_to_int(card: Card) -> int:
 #   '''Gives a numbering of the cards that is bijective in [0, ... len(_DECK)). The order is arbitrary
 #   '''
 #   return card.face.value * 4 + card.suit.value
 
-def card_to_int(card: Card) -> int:
-  '''Use this to play with a deck of only jesters, kings-wizards with suits D and S
-  '''
-  if card.face == Face.JESTER: return card.suit.value
-  return (card.face.value * 4 + card.suit.value) 
 
-def int_to_card(i: int) -> Card:
-  if i < 4: return Card(Face.JESTER, suits[i])
-  return Card(faces[((i-4)//4+Face.TWO.value)], suits[i%4])
 
 max_chance_actions = 1
 for i in range(_NUM_PLAYERS): max_chance_actions *= math.comb(len(_DECK)-i*_NUM_CARDS_PER_PLAYER, _NUM_CARDS_PER_PLAYER)
 _GAME_TYPE = pyspiel.GameType(
     short_name="open_python_wizard",
-    long_name="Open Card Python Wizard",
+    long_name="Open Python Wizard",
     dynamics=pyspiel.GameType.Dynamics.SEQUENTIAL,
-    chance_mode=pyspiel.GameType.ChanceMode.DETERMINISTIC,
+    chance_mode=pyspiel.GameType.ChanceMode.EXPLICIT_STOCHASTIC,
     information=pyspiel.GameType.Information.PERFECT_INFORMATION,
-    utility=pyspiel.GameType.Utility.ZERO_SUM,
+    utility=pyspiel.GameType.Utility.ZERO_SUM, #TODO this is a lie
     reward_model=pyspiel.GameType.RewardModel.TERMINAL,
     max_num_players=_NUM_PLAYERS,
     min_num_players=_NUM_PLAYERS,
@@ -192,23 +97,24 @@ _GAME_TYPE = pyspiel.GameType(
     provides_observation_tensor=True,
     provides_factored_observation_string=True)
 _GAME_INFO = pyspiel.GameInfo(
-    num_distinct_actions=_NUM_CARDS_PER_PLAYER+1+ len(_DECK), #playing a card
-    max_chance_outcomes= 0, #TODO this overflows if it's too big
+    num_distinct_actions=_NUM_CARDS_PER_PLAYER+1+len(_DECK), #either a bet action (_NUM_CARDS_PER_PLAYER+1) or playing a card
+    max_chance_outcomes=int(max_chance_actions) + len(_DECK), #TODO this overflows if it's too big
     num_players=_NUM_PLAYERS,
-    min_utility= -10,
-    max_utility= 10,
-    utility_sum= 0,
-    max_game_length=68)  # for 1 round, 60 cards + 6 players + 2 chance
+    min_utility=-_NUM_CARDS_PER_PLAYER*10.0,
+    max_utility=20.0+10*_NUM_CARDS_PER_PLAYER,
+    utility_sum=0,
+    max_game_length=len(_DECK) + _NUM_PLAYERS + 2)  # for 1 round, 60 cards + 6 players + 2 chance
 
-class WizardGame(pyspiel.Game):
+
+class OpenWizardGame(pyspiel.Game):
   """A Python version of Wizard."""
 
   def __init__(self, params=None):
     super().__init__(_GAME_TYPE, _GAME_INFO, params or dict())
 
-  def new_initial_state(self, game, hand, trump_card, next_player, predictions=[], tricks_tacken = [], current_round_cards=[], current_winning_card=None,current_winning_player=None, current_lead_suit=None):
+  def new_initial_state(self, game, hand, trump_card, next_player, initial_player_hands, predictions=[], who_started_tricks = [], previous_tricks= [], current_round_cards=[], tricks_per_player = [0 for _ in range(_NUM_PLAYERS)], current_winning_card=None,current_winning_player=None, current_lead_suit=None, metadata=0,Deck=_DECK):
     """Returns a state corresponding to the start of a game."""
-    return WizardState(self, hand, trump_card, next_player, predictions, tricks_tacken, current_round_cards, current_winning_card,current_winning_player, current_lead_suit) 
+    return OpenWizardState(self, hand, trump_card, next_player, initial_player_hands, predictions, who_started_tricks, previous_tricks, current_round_cards, tricks_per_player, current_winning_card,current_winning_player, current_lead_suit, metadata, Deck) 
 
   def make_py_observer(self, iig_obs_type=None, params=None):
     """Returns an object used for observing game state."""
@@ -217,7 +123,7 @@ class WizardGame(pyspiel.Game):
         params)
 
 
-class WizardState(pyspiel.State):
+class OpenWizardState(pyspiel.State):
   """Class representing a Wizard state.
       Concerns with this approach: there are far too many chance outcomes to be computationally feasible -
       in particular, this will invoke a computation with prod_{i=0}^(num_players-1) nCr(|deck| - i*num_cards_per_player, num_cards_per_player)
@@ -232,27 +138,30 @@ class WizardState(pyspiel.State):
       which card they played
   """
 
-  def __init__(self, game, hand, trump_card, next_player, predictions=[], tricks_tacken = [], current_round_cards=[], current_winning_card=None,current_winning_player=None, current_lead_suit=None):
+  def __init__(self, game, hand, trump_card, next_player, initial_player_hands, predictions=[], who_started_tricks = [], previous_tricks= [], current_round_cards=[], tricks_per_player = [0 for _ in range(_NUM_PLAYERS)], current_winning_card=None,current_winning_player=None, current_lead_suit=None, metadata=0,Deck=_DECK):
     """Constructor; should only be called by Game.new_initial_state."""
     super().__init__(game)
     self.player_hands: list[Hand] = hand
+    self.initial_player_hands = initial_player_hands
     self.predictions = predictions
-    self.previous_tricks: list[list[Card]] = tricks_tacken
+    self.who_started_tricks: list[int] = who_started_tricks
+    self.previous_tricks: list[list[Card]] = previous_tricks
     self.current_round_cards: list[Card] = current_round_cards
-    self.tricks_per_player = [0 for _ in range(_NUM_PLAYERS)]
+    self.tricks_per_player = tricks_per_player
     self.current_winning_card: Card | None = current_winning_card
     self.current_winning_player: int | None = current_winning_player
     self.current_lead_suit: Suit | None = current_lead_suit
     self.trump_card = trump_card
-    self._game_over = False
     self._next_player = next_player
+    self.metadata = metadata
+    self.Deck = Deck
 
   def current_player(self):
     """Returns id of the next player to move, or TERMINAL if game is over."""
-    if self._game_over:
+    if self.is_terminal():
       return pyspiel.PlayerId.TERMINAL
-    else:
-      return self._next_player
+   
+    return self._next_player
 
 
     
@@ -271,17 +180,11 @@ class WizardState(pyspiel.State):
 
 
 
+  
   def _apply_action(self, action):
     """Applies the specified action to the state."""
-    if self.is_chance_node():
-      #either a chance node is dealing the hands to players or specifying the trump card
-      if action >= max_chance_actions:
-        self.trump_card = int_to_card(action - max_chance_actions)
-      else: #otherwise, action is an index into the list of "combinations" objects, so we need to map it to a setf
-        all_possible_hands = generate_all_possible_hands(_NUM_PLAYERS, _NUM_CARDS_PER_PLAYER, _DECK) #TODO this could be made wayyyyyyyyyyy more efficient by knowing how to correspond an int to a combo
-        self.player_hands = list(map(lambda s: set(s), all_possible_hands[action]))
-    else:
-      if len(self.predictions) < _NUM_PLAYERS:
+   
+    if len(self.predictions) < _NUM_PLAYERS:
         self.predictions.append(action)
         self._next_player += 1
         if self._next_player == _NUM_PLAYERS:
@@ -290,9 +193,14 @@ class WizardState(pyspiel.State):
           for i in range(_NUM_PLAYERS):
             if self.predictions[i] > self.predictions[highest_num_idx]: highest_num_idx = i
           self._next_player = highest_num_idx
-      else:
+          self.who_started_tricks.append(self._next_player)
+    else:
         action = int_to_card(action-(_NUM_CARDS_PER_PLAYER+1))
-        assert action in self.player_hands[self._next_player]
+        
+        try:
+            assert action in self.player_hands[self._next_player]
+        except: 
+          breakpoint()
         self.player_hands[self._next_player].remove(action)
         #we can know for sure that this was a valid card
         cmp = get_cmp_from_trump_and_initial_suit(self.trump_card.suit if self.trump_card is not None else None, self.current_lead_suit)
@@ -310,37 +218,54 @@ class WizardState(pyspiel.State):
           self.current_winning_card = None
           self.current_lead_suit = None
           self.current_round_cards = []
+          self.who_started_tricks.append(self._next_player)
         else: self._next_player = (self._next_player + 1) % _NUM_PLAYERS
-        #if none of the players have cards left, the game is over
-        if all(map(lambda hand: len(hand) == 0, self.player_hands)):
-          self._game_over = True
-
+     
+  def clone(self):
+    game = pyspiel.load_game('open_python_wizard')
+    
+    return game.new_initial_state(game=game, hand=deepcopy(self.player_hands), trump_card = self.trump_card, next_player=self._next_player, initial_player_hands=self.initial_player_hands,                                   predictions =deepcopy(self.predictions), who_started_tricks = deepcopy(self.who_started_tricks), previous_tricks=deepcopy(self.previous_tricks), current_round_cards=deepcopy(self.current_round_cards), tricks_per_player=deepcopy(self.tricks_per_player), current_winning_card=self.current_winning_card,current_winning_player=self.current_winning_player, current_lead_suit=self.current_lead_suit, metadata=self.metadata, Deck=self.Deck)
+     
   def _action_to_string(self, player, action):
     """Action -> string."""
-    if action <= _NUM_PLAYERS: return f'Player {player} predicted {action}'
-    return f'Player {player} played card {int_to_card(action - _NUM_CARDS_PER_PLAYER -1)}'
+    if player == pyspiel.PlayerId.CHANCE:
+      if action >= max_chance_actions:
+       return f"Dealt card for trump suit: {int_to_card(action-max_chance_actions)}"
+      #otherwise, it's hands for all the players
+      return f'Dealt hands for all the players: {action}'
+    else:
+      if action <= _NUM_CARDS_PER_PLAYER: return f'Predict {action} tricks'
+      return f'Play card {int_to_card(action - _NUM_CARDS_PER_PLAYER -1)}'
 
   def is_terminal(self):
     """Returns True if the game is over."""
-    return self._game_over
+    return len(self.player_hands) == _NUM_PLAYERS and len(self.predictions) == _NUM_PLAYERS and all([len(h) == 1 for h in self.player_hands])
 
   def returns(self):
     """Total reward for each player over the course of the game so far."""
-    if not self._game_over:
+    if not self.is_terminal():
       return [0. for i in range(_NUM_PLAYERS)]
+    for i in range(self._next_player, self._next_player + _NUM_PLAYERS):
+      self._apply_action(card_to_action(self.player_hands[i % _NUM_PLAYERS].__iter__().__next__()))
     def reward_for_player(i: int):
       if self.tricks_per_player[i] == self.predictions[i]: return 20 + 10 * self.tricks_per_player[i]
       return -10 * abs(self.tricks_per_player[i] - self.predictions[i]) 
-    first_player_points = abs(self.tricks_per_player[1] - self.predictions[1]) - abs(self.tricks_per_player[0] - self.predictions[0]) 
-    return [first_player_points, -first_player_points]
+    if _NUM_PLAYERS != 2: raise Exception('Currently, only two players are supported for 0 sum')
+    r0,r1 = reward_for_player(0), reward_for_player(1)
+    if r0 > r1: return [r0-r1, -(r0-r1)]
+    elif r0 == r1: return [0, 0]
+    else: return [-(r1-r0), (r1-r0)]
+#    return [reward_for_player(i) for i in range(_NUM_PLAYERS)]
+ 
 
   def __str__(self):
     return f'Player acting: {self._next_player}\n Predictions: {self.predictions}\n' \
-    + f'Trump suit: {self.trump_card.suit if self.trump_card else None} lead suit: {self.current_lead_suit}' \
-    + f'Current round: {self.current_round_cards}' + f'Hands: {list(map(lambda h: list(h), self.player_hands))} \n' \
-    + f'History: {list(map(lambda t: str(t), self.previous_tricks))} \n' + f'Tricks Per Player: {self.tricks_per_player}'
+    + f'Trump card: {str(self.trump_card)} lead suit: {self.current_lead_suit}' \
+    + f'Current round: {[str(c) for c in self.current_round_cards]}' + f'Hands: {list(map(lambda h: list(map(lambda c: str(c), h)), self.player_hands))} \n' \
+    + f'History: {[[str(c) for c in t] for t in self.previous_tricks]}' + f'Initial hands: {[[str(c) for c in t] for t in self.initial_player_hands]}'
 
-class WizardObserver:
+
+class OpenWizardObserver:
   """Observer, conforming to the PyObserver interface (see observation.py)."""
   """It's not too clear from the documentation what exactly a state is, but
   from what I can tell, the main thing is keeping track of a tensor and dict such that string_from
@@ -364,7 +289,9 @@ class WizardObserver:
       pieces.append(("predictions", _NUM_PLAYERS*(_NUM_CARDS_PER_PLAYER+1), (_NUM_PLAYERS, _NUM_CARDS_PER_PLAYER+1))) #one-hot encoding of prediction for player i
       #one-hot encoding of cards played by each player from the start of each trick, over all tricks (the player who started round i can be deduced
       #inductively by knowing that P0 starts round 0 and keeping track of who won round i-1)
+      pieces.append(("trump_card", len(_DECK), (len(_DECK), )))
       pieces.append(("played_cards", len(_DECK) * _NUM_CARDS_PER_PLAYER * _NUM_PLAYERS, (_NUM_CARDS_PER_PLAYER, len(_DECK) * _NUM_PLAYERS))) 
+      pieces.append(('metadata', WizardState.MAXIMUM_METADATA_SIZE, (WizardState.MAXIMUM_METADATA_SIZE, )))
         
     # Build the single flat tensor.
     total_size = sum(size for name, size, shape in pieces)
@@ -403,7 +330,13 @@ class WizardObserver:
           self.dict['played_cards'][i][card_to_int(card)] = 1
       for card in state.current_round_cards:
         self.dict['played_cards'][len(state.previous_tricks)][card_to_int(card)] = 1
-    
+    if 'trump_card' in self.dict and state.trump_card is not None:
+      self.dict['trump_card'][card_to_int(state.trump_card)] = 1
+    if 'metadata' in self.dict:
+      for i, c in enumerate(str(bin(state.metadata))[2:]):
+        self.dict['metadata'][i] = c
+
+
   def string_from(self, state: WizardState, player):
     """Observation of `state` from the PoV of `player`, as a string."""
     pieces = []
@@ -411,16 +344,20 @@ class WizardObserver:
       pieces.append(f"p{player}")
     if "player0_cards" in self.dict and len(state.player_hands) > player:
       pieces.append(f"cards in hand: {str(list(map(lambda s: str(s), state.player_hands[0])))}")
-    if "player0_cards" in self.dict and len(state.player_hands) > player:
+    if "player1_cards" in self.dict and len(state.player_hands) > player:
       pieces.append(f"cards in hand: {str(list(map(lambda s: str(s), state.player_hands[1])))}")
     if "predictions" in self.dict:
       pieces.append(f"predictions[{state.predictions}]")
     if "played_cards" in self.dict and len(state.current_round_cards) > 0 or len(state.previous_tricks) > 0:
       for i in range(len(state.previous_tricks)):
-        pieces.append('tr: '.join(str(card) for card in state.previous_tricks[i]))
-      pieces.append("curr: ".join(str(card) for card in state.current_round_cards))
+        pieces.append(f'tr: {i+1}')
+        pieces.append(' '.join(str(card) for card in state.previous_tricks[i]))
+      pieces.append('curr:')
+      pieces.append(" ".join(str(card) for card in state.current_round_cards))
+    if 'metadata' in self.dict:
+      pieces.append(f'metadata: {state.metadata}')
     return " ".join(str(p) for p in pieces)
 
 # Register the game with the OpenSpiel library
 
-pyspiel.register_game(_GAME_TYPE, WizardGame)
+pyspiel.register_game(_GAME_TYPE, OpenWizardGame)

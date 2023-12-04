@@ -22,7 +22,7 @@ from __future__ import print_function
 import collections
 import random
 import sys
-
+import pickle
 from absl import app
 from absl import flags
 import numpy as np
@@ -44,6 +44,7 @@ _KNOWN_PLAYERS = [
     # You'll be asked to provide the moves.
     "human",
 
+    "cfr",
     # Run an external program that speaks the Go Text Protocol.
     # Requires the gtp_path flag.
     "gtp",
@@ -53,13 +54,13 @@ _KNOWN_PLAYERS = [
     "az"
 ]
 
-flags.DEFINE_string("game", "tic_tac_toe", "Name of the game.")
+flags.DEFINE_string("game", "python_wizard", "Name of the game.")
 flags.DEFINE_enum("player1", "mcts", _KNOWN_PLAYERS, "Who controls player 1.")
-flags.DEFINE_enum("player2", "random", _KNOWN_PLAYERS, "Who controls player 2.")
+flags.DEFINE_enum("player2", "cfr", _KNOWN_PLAYERS, "Who controls player 2.")
 flags.DEFINE_string("gtp_path", None, "Where to find a binary for gtp.")
 flags.DEFINE_multi_string("gtp_cmd", [], "GTP commands to run at init.")
-flags.DEFINE_string("az_path", None,
-                    "Path to an alpha_zero checkpoint. Needed by an az player.")
+flags.DEFINE_string("cfr_path", None,
+                    "path to cfr guy")
 flags.DEFINE_integer("uct_c", 2, "UCT's exploration constant.")
 flags.DEFINE_integer("rollout_count", 1, "How many rollouts to do.")
 flags.DEFINE_integer("max_simulations", 1000, "How many simulations to run.")
@@ -101,6 +102,11 @@ def _init_bot(bot_type, game, player_id):
     for cmd in FLAGS.gtp_cmd:
       bot.gtp_cmd(cmd)
     return bot
+  if bot_type == "cfr":
+    if FLAGS.cfr_path is not None: 
+        with open(FLAGS.cfr_path, 'rb') as f:
+            bot_policy = pickle.load(f)
+    return bot_policy
   raise ValueError("Invalid bot type: %s" % bot_type)
 
 
@@ -136,6 +142,7 @@ def _play_game(game, bots, initial_actions):
     _opt_print("Next state:\n{}".format(state))
 
   while not state.is_terminal():
+    breakpoint()
     current_player = state.current_player()
     # The state can be three different types: chance node,
     # simultaneous node, or decision node
