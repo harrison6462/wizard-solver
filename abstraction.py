@@ -152,12 +152,12 @@ def equity_from_rollout(nodes : list) -> float:
 
 # ______________________________________________________________________________________________________________________________________________________________________________________________
 # Wait nvm potential-aware doesn't apply because there's no chance actions after all cards are dealt. Instead try distribution aware abstraction:
-# DISTR-AWARE:
+# DISTR-AWARE (HAND):
 
 # add profiling?
 
 max_min_dict = {}
-def get_equities_fn(my_hand, deck):
+def get_equities_fn(my_hand, deck, trump):
     # on full deck, 10 s/it... 95 hours for full run :/
     start_time = time.time()
     # max_min_dict = {} # made global for DP efficiency
@@ -192,7 +192,7 @@ def distr_abstraction(num_clusters: int, cards_per_hand, deck, trump_suit) -> li
     print(f'current clustering algorithm on {len(possible_hands)} possible hands\n')
     for hand in possible_hands:
         # hist_min, hist_max = get_equities_fn(hand, deck)
-        list_min, list_max = get_equities_fn(hand, deck)
+        list_min, list_max = get_equities_fn(hand, deck, trump_suit)
         # histogram_dict[hand] = (hist_min, hist_max)
         list_max_shifted = [i + 2*(cards_per_hand+1) for i in list_max] #so we don't mess up EMD by being too close to list_min
         list_combined = list_min + list_max_shifted
@@ -354,8 +354,6 @@ def max_min_cards(p1_hand, p2_hand, max_min_dict, trump):
 #     return max_min_dict
 
 
-# Distribution aware
-
 # approx E(wins) by calculating E(guaranteed wins), E(guaranteed losses)
 #* not used rn, ignore
 def equity(hand, trump_suit, player_id): 
@@ -438,7 +436,66 @@ def equity(hand, trump_suit, player_id):
     print(hist_min)
     pass
 
-# def equity2(hand, trump_suit, player_id)
+# ______________________________________________________________________________________________________________________________________________________________________________________________
+# DISTR-AWARE (CARD):
+
+def get_equities_fn_card(my_card, deck, trump):
+    start_time = time.time()
+    wincount_list = []
+    deck = [c for c in deck] # 'deepcopy'
+    deck.remove(my_card)
+    opp_possible_cards = deck
+
+    # if my_card.face == wizard.Face.JESTER or my_card.face == wizard.Face.THREE: breakpoint()
+    for opp_card in opp_possible_cards:
+        wincount = 0
+        if cmp_cards(my_card, opp_card, trump): wincount += 1
+        if not cmp_cards(opp_card, my_card, trump): wincount += 1
+        wincount_list.append(wincount)
+
+    end_time = time.time()
+    print(f'get_equities_fn runtime: {end_time - start_time}\n')
+    return wincount_list
+
+# could improve by taking into account possible hands formed by card, even if card is the only clustering item
+# calculate 'equity' histogram for every possible card, then k-means cluster with EMD on histograms as distance metric
+def distr_abstraction_card(num_clusters: int, deck, trump_suit) -> list:
+    # for player 1
+    hist_list = []
+    card_list = []
+    print(f'current clustering algorithm on {len(deck)} possible hands\n')
+    for card in deck:
+        list_num_wins = get_equities_fn_card(card, deck, trump_suit)
+        hist = np.histogram(list_num_wins, bins=np.arange(3), density=True)
+        hist_list.append(hist[0])
+        card_list.append(card)
+
+    def EMD(hist1 : list[float], hist2 : list[float]) -> float:
+        start_time = time.time()
+        hist1 = np.array(hist1)
+        hist2 = np.array(hist2)
+        distance_matrix = np.array([[float(abs(i-j)) for j in range(len(hist1))] for i in range(len(hist1))]) # defines ground distances btween elts
+        
+        end_time = time.time()
+        # print(f'EMD runtime: {end_time - start_time}\n')
+        return emd(hist1, hist2, distance_matrix) 
+
+    def k_means(vectors, num_clusters):
+        start_time = time.time()
+        clusterer = KMeansClusterer(num_clusters, EMD, initial_means=None, avoid_empty_clusters=True)
+        clusters = clusterer.cluster(vectors, True, trace=True)
+        
+        end_time = time.time()
+        print(f'k_means runtime: {end_time - start_time}\n')
+        return clusters
+
+    cluster_ids = k_means(hist_list, num_clusters) 
+    clusters = [[] for i in range(num_clusters)]
+    for i in range(len(card_list)): #assume hist_list order same as card_list (which should be true by how i coded it)
+        cluster_id = cluster_ids[i]
+        card = card_list[i]
+        clusters[cluster_id].append(card)
+    return clusters
 
 if __name__== "__main__":
     hands, remaining_deck = wizard.generate_hands(2, 3, wizard.deck)
@@ -506,9 +563,10 @@ if __name__== "__main__":
         card_list = []
         for hand in cluster:
             card_list.append(list(map(str, hand)))
-        print(f'cards in cluster {i+1}: {card_list}')
+        print(f'hands in cluster {i+1}: {card_list}')
     '''
 
+    '''
     test_deck_3 = set([wizard.Card(wizard.Face.TWO, wizard.Suit.DIAMOND), wizard.Card(wizard.Face.THREE, wizard.Suit.DIAMOND), wizard.Card(wizard.Face.FOUR, wizard.Suit.DIAMOND), wizard.Card(wizard.Face.FIVE, wizard.Suit.DIAMOND),
                      wizard.Card(wizard.Face.TWO, wizard.Suit.HEART), wizard.Card(wizard.Face.THREE, wizard.Suit.HEART), wizard.Card(wizard.Face.FOUR, wizard.Suit.HEART), wizard.Card(wizard.Face.FIVE, wizard.Suit.HEART),
                      wizard.Card(wizard.Face.TWO, wizard.Suit.SPADE), wizard.Card(wizard.Face.THREE, wizard.Suit.SPADE), wizard.Card(wizard.Face.FOUR, wizard.Suit.SPADE), wizard.Card(wizard.Face.FIVE, wizard.Suit.SPADE),
@@ -524,7 +582,41 @@ if __name__== "__main__":
         card_list = []
         for hand in cluster:
             card_list.append(list(map(str, hand)))
-        print(f'cards in cluster {i+1}: {card_list}')
+        print(f'hands in cluster {i+1}: {card_list}')
+    '''
 
+    '''
+    test_deck_4 = set([wizard.Card(wizard.Face.TWO, wizard.Suit.DIAMOND), wizard.Card(wizard.Face.THREE, wizard.Suit.DIAMOND), wizard.Card(wizard.Face.JESTER, wizard.Suit.DIAMOND), wizard.Card(wizard.Face.WIZARD, wizard.Suit.DIAMOND),
+                     wizard.Card(wizard.Face.TWO, wizard.Suit.HEART), wizard.Card(wizard.Face.THREE, wizard.Suit.HEART), wizard.Card(wizard.Face.JESTER, wizard.Suit.HEART), wizard.Card(wizard.Face.WIZARD, wizard.Suit.HEART),
+                     ])
+    
+    num_clusters = 4
+    hand_num_cards = 3
+    clusters = distr_abstraction_card(num_clusters, test_deck_4, wizard.Suit.DIAMOND)
+
+    for i in range(len(clusters)):
+        cluster = clusters[i]
+        card_list = []
+        for card in cluster:
+            card_list.append(str(card))
+        print(f'cards in cluster {i+1}: {card_list}')
+    '''
+
+    test_deck_5 = set([wizard.Card(wizard.Face.TWO, wizard.Suit.DIAMOND), wizard.Card(wizard.Face.THREE, wizard.Suit.DIAMOND), wizard.Card(wizard.Face.FOUR, wizard.Suit.DIAMOND), wizard.Card(wizard.Face.FIVE, wizard.Suit.DIAMOND), wizard.Card(wizard.Face.SIX, wizard.Suit.DIAMOND),
+                     wizard.Card(wizard.Face.TWO, wizard.Suit.HEART), wizard.Card(wizard.Face.THREE, wizard.Suit.HEART), wizard.Card(wizard.Face.FOUR, wizard.Suit.HEART), wizard.Card(wizard.Face.FIVE, wizard.Suit.HEART), wizard.Card(wizard.Face.SIX, wizard.Suit.HEART),
+                     wizard.Card(wizard.Face.TWO, wizard.Suit.SPADE), wizard.Card(wizard.Face.THREE, wizard.Suit.SPADE), wizard.Card(wizard.Face.FOUR, wizard.Suit.SPADE), wizard.Card(wizard.Face.FIVE, wizard.Suit.SPADE), wizard.Card(wizard.Face.SIX, wizard.Suit.SPADE),
+                     wizard.Card(wizard.Face.JESTER, wizard.Suit.SPADE), wizard.Card(wizard.Face.JESTER, wizard.Suit.HEART), wizard.Card(wizard.Face.WIZARD, wizard.Suit.SPADE), wizard.Card(wizard.Face.WIZARD, wizard.Suit.HEART)
+                     ])
+
+    num_clusters = 5
+    hand_num_cards = 3
+    clusters = distr_abstraction_card(num_clusters, test_deck_5, wizard.Suit.DIAMOND)
+
+    for i in range(len(clusters)):
+        cluster = clusters[i]
+        card_list = []
+        for card in cluster:
+            card_list.append(str(card))
+        print(f'cards in cluster {i+1}: {card_list}')
 
     breakpoint()
