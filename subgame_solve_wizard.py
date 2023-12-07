@@ -10,6 +10,7 @@ from open_spiel.python.algorithms import cfr
 from open_spiel.python.algorithms import exploitability
 from itertools import product, combinations
 import math
+import pickle
 import pyspiel
 
 def write_subgame_strategy_onto_policy_for_player(blueprint_strategy: TabularPolicy, subgame_name: str, subgame_policy: TabularPolicy, players_to_update: set) -> None:
@@ -23,7 +24,7 @@ def write_subgame_strategy_onto_policy_for_player(blueprint_strategy: TabularPol
         if state.is_terminal(): continue
         if state._next_player not in players_to_update or state.metadata != 0: continue
         try:
-            state_policy = blueprint_strategy.policy_for_key(observer.string_from(state, state._next_player))
+            state_policy = blueprint_strategy.action_probabilities(observer.string_from(state, state._next_player))
             for action, value in subgame_policy.action_probabilities(state, state._next_player).items():
                 state_policy[action] = value
         except LookupError as e:
@@ -44,16 +45,20 @@ def get_all_hands_consistent_with_observations(state: WizardState, player_cards_
     # if perspective_player == opp_player: return state.player_hands[perspective_player]
     #otherwise, the other players can have all possible combinations of unexposed cards from the deck remaining
     valid_hand_combinations = []
-    valid = True
+    
     for hands in all_possible_hands:
+        valid = True
+
+        for player in sorted(player_cards_to_see): hands.insert(player, copy(state.player_hands[player]))
         played_so_far: list[set[Card]] = [set() for _ in range(_NUM_PLAYERS)]
         for round in state.previous_tricks:
             for player in range(state.who_started_tricks[round], state.who_started_tricks[round] + _NUM_PLAYERS):
                 curr = player % _NUM_PLAYERS
-                if not is_valid_move(state.previous_tricks[round][0], state.previous_tricks[round][curr], hands[curr] - played_so_far[curr]): valid = False
+                if not is_valid_move(state.previous_tricks[round][0], state.previous_tricks[round][curr], hands[curr] - played_so_far[curr]): 
+                    valid = False
+                    break
                 played_so_far[curr].add(state.previous_tricks[round][curr])
         if valid: 
-            for player in sorted(player_cards_to_see): hands.insert(player, copy(state.player_hands[player]))
             valid_hand_combinations.append(hands)
     return valid_hand_combinations
 
@@ -62,7 +67,7 @@ def get_all_initial_hands_consistent_with_state(state: WizardState, player_cards
     played_cards: list[set[Card]] = [set() for _ in range(_NUM_PLAYERS)]
     if len(state.who_started_tricks) > 0:
         for i in range(len(state.previous_tricks)):
-            for trick in state.previous_tricks[i]:
+            for trick in range(len(state.previous_tricks[i])):
                 for player in range(state.who_started_tricks[i], state.who_started_tricks[i] + _NUM_PLAYERS):
                     played_cards[player % _NUM_PLAYERS].add(trick[player % _NUM_PLAYERS])
         
@@ -84,7 +89,7 @@ def get_history_reach_probability(game, policies: list[Policy], subgame_root_sta
     try:
         for prediction in subgame_root_state.predictions:
             if game_root._next_player not in players_to_exclude_in_reach_probability: 
-                p = policies[game_root._next_player].action_probabilities(game_root, game_root._next_player)[prediction]
+                p = policies[game_root._next_player].action_probabilities(game_root)[prediction]
                 joint_prob *= p
             game_root._apply_action(prediction)
         
@@ -94,7 +99,7 @@ def get_history_reach_probability(game, policies: list[Policy], subgame_root_sta
             for card in previous_trick:
                 action = card_to_action(card)
                 if game_root._next_player not in players_to_exclude_in_reach_probability: 
-                    p = policies[game_root._next_player].action_probabilities(game_root, game_root._next_player)[action]
+                    p = policies[game_root._next_player].action_probabilities(game_root)[action]
                     joint_prob *= p
                 game_root._apply_action(action)
 
@@ -498,6 +503,8 @@ def create_maxmargin_subgame(blueprint_strategy: Policy, player: int, subgame_ro
 def do_unsafe_subgame_solve_test():
     game = pyspiel.load_game('python_wizard')
     policy = UniformRandomPolicy(game).to_tabular()
+    with open('cfrplus_solver.pickle', 'rb') as f:
+        policy = pickle.load(f).tabular_average_policy()
     for predictions in map(lambda t: [t[0], t[1]], product([0,1,2], [0,1,2])):
         root_state: WizardState = game.new_initial_state()
         root_state.player_hands = [set([Card(Face.ACE, Suit.DIAMOND), Card(Face.WIZARD, Suit.CLUB)]), set([Card(Face.WIZARD, Suit.DIAMOND), Card(Face.JESTER, Suit.CLUB)])]
@@ -511,17 +518,19 @@ def do_unsafe_subgame_solve_test():
         print(exploitability.exploitability(game, policy))
         #now, run 1 iteration of CFR on the subgame
         cfr_solver = cfr.CFRSolver(subgame)
-        for i in range(16):
+        for i in range(10):
             print(f'Running CFR iteration {i}')
             cfr_solver.evaluate_and_update_policy()
-            avg_policy = cfr_solver.average_policy()
-            print(exploitability.exploitability(subgame, cfr_solver.average_policy()))
+            # avg_policy = cfr_solver.average_policy()
+            # print(exploitability.exploitability(subgame, cfr_solver.average_policy()))
         write_subgame_strategy_onto_policy_for_player(policy, unsafe_subgame, cfr_solver.average_policy(), set([0,1]))
     print(exploitability.exploitability(game, policy))
 
 def do_resolve_subgame_solve_test():
     game = pyspiel.load_game('python_wizard')
-    policy = UniformRandomPolicy(game).to_tabular()
+    # policy = UniformRandomPolicy(game).to_tabular()
+    with open('cfrplus_solver.pickle', 'rb') as f:
+        policy = pickle.load(f).tabular_average_policy()
     for predictions in map(lambda t: [t[0], t[1]], product([0,1,2], [0,1,2])):
         root_state: WizardState = game.new_initial_state()
         root_state.player_hands = [set([Card(Face.ACE, Suit.DIAMOND), Card(Face.WIZARD, Suit.CLUB)]), set([Card(Face.WIZARD, Suit.DIAMOND), Card(Face.JESTER, Suit.CLUB)])]
@@ -532,13 +541,13 @@ def do_resolve_subgame_solve_test():
         root_state.who_started_tricks.append(root_state._next_player)
         resolve_subgame = create_resolve_subgame(policy, 0, root_state)
         subgame = pyspiel.load_game(resolve_subgame)
-        print(exploitability.exploitability(game, policy))
+        # print(exploitability.exploitability(game, policy))
         cfr_solver = cfr.CFRSolver(subgame)
         for i in range(10):
             print(f'Running CFR iteration {i}')
             cfr_solver.evaluate_and_update_policy()
             avg_policy = cfr_solver.average_policy()
-            print(exploitability.exploitability(subgame, cfr_solver.average_policy()))
+            # print(exploitability.exploitability(subgame, cfr_solver.average_policy()))
         write_subgame_strategy_onto_policy_for_player(policy, resolve_subgame, cfr_solver.average_policy(), set([0,1]))
     print(exploitability.exploitability(game, policy))
 
@@ -555,18 +564,18 @@ def do_maxmargin_subgame_solve_test():
         root_state.who_started_tricks.append(root_state._next_player)
         maxmargin_subgame = create_maxmargin_subgame(policy, 0, root_state)
         subgame = pyspiel.load_game(maxmargin_subgame)
-        print(exploitability.exploitability(game, policy))
+        # print(exploitability.exploitability(game, policy))
         cfr_solver = cfr.CFRSolver(subgame)
         for i in range(10):
             print(f'Running CFR iteration {i}')
             cfr_solver.evaluate_and_update_policy()
             avg_policy = cfr_solver.average_policy()
-            print(exploitability.exploitability(subgame, cfr_solver.average_policy()))
+            # print(exploitability.exploitability(subgame, cfr_solver.average_policy()))
         write_subgame_strategy_onto_policy_for_player(policy, maxmargin_subgame, cfr_solver.average_policy(), set([0,1]))
     print(exploitability.exploitability(game, policy))
 
 
 if __name__ == '__main__':
-    #do_unsafe_subgame_solve_test()
-    # do_resolve_subgame_solve_test()
-    do_maxmargin_subgame_solve_test()
+    # do_unsafe_subgame_solve_test()
+    do_resolve_subgame_solve_test()
+    # do_maxmargin_subgame_solve_test()

@@ -1,5 +1,6 @@
-from wizard import WizardGame, WizardState, card_to_action
+from wizard import WizardGame, WizardObserver, WizardState, card_to_action
 from open_spiel.python.policy import Policy, UniformRandomPolicy
+from open_spiel.python.algorithms.cfr import CFRPlusSolver
 import numpy as np
 import pickle
 
@@ -17,7 +18,18 @@ def get_action_from_user(state: WizardState) -> int:
 
 def get_action_fn_from_policy(policy: Policy):
     def get_action_from_state(state: WizardState):
-        action_probs: dict[int, float] = policy.action_probabilities(state, state._next_player)
+        action_probs: dict[int, float] = policy.action_probabilities(state)
+        actions, probs = list(action_probs.keys()), list(action_probs.values())
+        return np.random.choice(actions, p=probs)
+    return get_action_from_state
+
+#from cfr
+
+def get_action_fn_from_cfr_solver(cfr_solver: CFRPlusSolver, observer: WizardObserver):
+    def get_action_from_state(state: WizardState):
+        print(cfr_solver)
+        info_state_policy = cfr_solver._get_infostate_policy(observer.string_from(state))
+        action_probs: dict[int, float] = info_state_policy.action_probabilities(state)
         actions, probs = list(action_probs.keys()), list(action_probs.values())
         return np.random.choice(actions, p=probs)
     return get_action_from_state
@@ -45,8 +57,8 @@ if __name__ == '__main__':
     parser.add_argument('--policy_file', type=str, default=None)
     args = parser.parse_args()
     game: WizardGame = pyspiel.load_game('python_wizard')
-    bot_policy = UniformRandomPolicy(game)
+    bot_policy = get_action_fn_from_policy(UniformRandomPolicy(game))
     if args.policy_file is not None: 
-        with open(args.policy_file) as f:
-            bot_policy = pickle.load(f)
-    main([get_action_from_user, get_action_fn_from_policy(UniformRandomPolicy(game))])
+        with open(args.policy_file, 'rb') as f:
+            bot_policy = get_action_fn_from_policy(pickle.load(f).tabular_average_policy())
+    main([bot_policy, bot_policy])

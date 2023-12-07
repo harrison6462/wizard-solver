@@ -65,6 +65,31 @@ class Suit(Enum):
     HEART = 2
     SPADE = 3
 
+def nth_combination(iterable, r, index):
+  '''Copied from https://stackoverflow.com/questions/1776442/nth-combination
+  '''
+  'Equivalent to list(combinations(iterable, r))[index]'
+  pool = tuple(iterable)
+  n = len(pool)
+  if r < 0 or r > n:
+      raise ValueError
+  c = 1
+  k = min(r, n-r)
+  for i in range(1, k+1):
+      c = c * (n - k + i) // i
+  if index < 0:
+      index += c
+  if index < 0 or index >= c:
+      raise IndexError
+  result = []
+  while r:
+      c, n, r = c*r//n, n-1, r-1
+      while index >= c:
+          index -= c
+          c, n = c*(n-r)//n, n-1
+      result.append(pool[-1-n])
+  return set(result)
+
 face_to_str = ['R', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A', 'W']
 str_to_face: Callable[[str], Face | None] = lambda t: Face(face_to_str.index(t)) if t in face_to_str else None
 suit_to_str = ['C', 'D', 'H', 'S']
@@ -141,7 +166,7 @@ def generate_all_possible_hands(num_players: int, num_cards_per_player: int | li
   if isinstance(num_cards_per_player, int): num_cards_per_player = [num_cards_per_player for _ in range(_NUM_PLAYERS)]
   assert sum(num_cards_per_player) <= len(deck)
   all_choices = map(lambda s: [set(s)], combinations(deck, num_cards_per_player[0]))
-  for _ in range(1, num_players):
+  for i in range(1, num_players):
     new_all_choices = []
     for choice in all_choices:
       all_cards_in_choice = set().union(*map(lambda s: set(s), choice))
@@ -158,22 +183,43 @@ _NUM_PLAYERS = 2
 _NUM_CARDS_PER_PLAYER = 2
 #wizards / jesters will have club/diamond/heart/spade variety - these will have no impact
 #_DECK = frozenset(map(lambda face_and_suit: Card(*face_and_suit), itertools.product(faces, suits)))
-_DECK = frozenset(map(lambda face_and_suit: Card(*face_and_suit), itertools.product([Face.JESTER, Face.ACE, Face.WIZARD], [Suit.CLUB, Suit.DIAMOND])))
+_FACES_IN_DECK = [Face.JESTER, Face.ACE, Face.WIZARD]
+_SUITS_IN_DECK = [Suit.CLUB, Suit.DIAMOND]
+_DECK = frozenset(map(lambda face_and_suit: Card(*face_and_suit), itertools.product(_FACES_IN_DECK, _SUITS_IN_DECK)))
+# all_possible_hands = generate_all_possible_hands(_NUM_PLAYERS, _NUM_CARDS_PER_PLAYER, _DECK) #TODO this could be made wayyyyyyyyyyy more efficient by knowing how to correspond an int to a combo
 #TODO this is an important function, perhaps more attention should be drawn to it
 # def card_to_int(card: Card) -> int:
 #   '''Gives a numbering of the cards that is bijective in [0, ... len(_DECK)). The order is arbitrary
 #   '''
 #   return card.face.value * 4 + card.suit.value
 
+# def int_to_card(i: int) -> Card:
+#   return Card(faces[(i//4)], suits[i%4])
+
+class AllPossibleHandsList:
+  '''This class works around having to initialize a massive list in memory to tell OpenSpiel that all chance options are equally likely.
+  Instead, we can just
+  '''
+  def __init__(self, remaining_deck: Deck, hand_size: int):
+    self.remaining_deck = remaining_deck
+    self.hand_size = hand_size
+    self.max_actions = math.comb(len(self.remaining_deck), self.hand_size)
+
+  def __len__(self) -> int:
+      return self.max_actions
+  
+  def __getitem__(self, index):
+    return (index, 1/self.max_actions)
+
 def card_to_int(card: Card) -> int:
   '''Use this to play with a deck of only jesters, kings-wizards with suits D and S
   '''
   if card.face == Face.JESTER: return card.suit.value
-  return (card.face.value * 2 + card.suit.value) - (Face.ACE.value * 2) + 2
+  return (card.face.value * len(_SUITS_IN_DECK) + card.suit.value) - (_FACES_IN_DECK[1].value * len(_SUITS_IN_DECK)) + len(_SUITS_IN_DECK)
 
 def int_to_card(i: int) -> Card:
-  if i < 2: return Card(Face.JESTER, suits[i])
-  return Card(faces[((i-2)//2+Face.ACE.value)], suits[i%2])
+  if i < len(_SUITS_IN_DECK): return Card(Face.JESTER, suits[i])
+  return Card(faces[((i-len(_SUITS_IN_DECK))//len(_SUITS_IN_DECK)+_FACES_IN_DECK[1].value)], suits[i%len(_SUITS_IN_DECK)])
 
 def card_to_action(c: Card) -> int:
   return card_to_int(c) + _NUM_CARDS_PER_PLAYER + 1
@@ -181,8 +227,8 @@ def card_to_action(c: Card) -> int:
 def action_to_card(a: int) -> Card:
   return int_to_card(a - _NUM_CARDS_PER_PLAYER - 1)
 
-max_chance_actions = 1
-for i in range(_NUM_PLAYERS): max_chance_actions *= math.comb(len(_DECK)-i*_NUM_CARDS_PER_PLAYER, _NUM_CARDS_PER_PLAYER)
+max_chance_actions = math.comb(len(_DECK), _NUM_CARDS_PER_PLAYER)
+# for i in range(_NUM_PLAYERS): max_chance_actions *= math.comb(len(_DECK)-i*_NUM_CARDS_PER_PLAYER, _NUM_CARDS_PER_PLAYER)
 _GAME_TYPE = pyspiel.GameType(
     short_name="python_wizard",
     long_name="Python Wizard",
@@ -198,6 +244,7 @@ _GAME_TYPE = pyspiel.GameType(
     provides_observation_string=True,
     provides_observation_tensor=True,
     provides_factored_observation_string=True)
+
 _GAME_INFO = pyspiel.GameInfo(
     num_distinct_actions=_NUM_CARDS_PER_PLAYER+1+len(_DECK), #either a bet action (_NUM_CARDS_PER_PLAYER+1) or playing a card
     max_chance_outcomes=int(max_chance_actions) + len(_DECK), #TODO this overflows if it's too big
@@ -267,7 +314,7 @@ class WizardState(pyspiel.State):
       return self._next_player
 
   def is_chance_node(self):
-    return len(self.player_hands) == 0 or (self.trump_card is None and _NUM_PLAYERS * _NUM_CARDS_PER_PLAYER < len(_DECK))
+    return len(self.player_hands) < _NUM_PLAYERS or (self.trump_card is None and _NUM_PLAYERS * _NUM_CARDS_PER_PLAYER < len(_DECK))
     
   def _legal_actions(self, player) -> list[BetAction | CardAction]:
     """Returns a list of legal actions."""
@@ -284,9 +331,10 @@ class WizardState(pyspiel.State):
   def chance_outcomes(self):
     """Returns the possible chance outcomes and their probabilities."""
     assert self.is_chance_node()
-    if len(self.player_hands) == 0:
+    if len(self.player_hands) < _NUM_PLAYERS:
       #make the player hands
-      outcomes = range(max_chance_actions) #generate_all_possible_hands(_NUM_PLAYERS, _NUM_CARDS_PER_PLAYER, _DECK)
+      # outcomes = range(max_chance_actions) #generate_all_possible_hands(_NUM_PLAYERS, _NUM_CARDS_PER_PLAYER, _DECK)
+      return AllPossibleHandsList(_DECK - set().union(*self.player_hands), _NUM_CARDS_PER_PLAYER)
     else:
       assert _NUM_CARDS_PER_PLAYER * _NUM_PLAYERS < len(_DECK)
       outcomes = sorted(map(lambda c: max_chance_actions + card_to_int(c), _DECK - set().union(*self.player_hands)))
@@ -303,8 +351,7 @@ class WizardState(pyspiel.State):
       if action >= max_chance_actions:
         self.trump_card = int_to_card(action - max_chance_actions)
       else: #otherwise, action is an index into the list of "combinations" objects, so we need to map it to a setf
-        all_possible_hands = generate_all_possible_hands(_NUM_PLAYERS, _NUM_CARDS_PER_PLAYER, _DECK) #TODO this could be made wayyyyyyyyyyy more efficient by knowing how to correspond an int to a combo
-        self.player_hands = list(map(lambda s: set(s), all_possible_hands[action]))
+        self.player_hands.append(nth_combination(_DECK - self.get_all_exposed_cards(set(range(len(self.player_hands)))), _NUM_CARDS_PER_PLAYER, action))
         self.initial_player_hands = deepcopy(self.player_hands)
     else:
       if len(self.predictions) < _NUM_PLAYERS:
