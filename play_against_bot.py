@@ -1,5 +1,6 @@
-from wizard import WizardGame, WizardState, card_to_action
+from wizard import WizardGame, WizardObserver, WizardState, card_to_action
 from open_spiel.python.policy import Policy, UniformRandomPolicy
+from open_spiel.python.algorithms.cfr import CFRPlusSolver
 import numpy as np
 import pickle
 
@@ -46,6 +47,7 @@ def main(action_fns: list, iters):
             while not state.is_terminal():
                 if state.is_chance_node():
                     #randomly sample a chance outcome
+                    #change this to generating a random int and call the function you should cal (ask me about this gil)
                     actions, probs = zip(*state.chance_outcomes())
                     action = np.random.choice(actions, p=probs)
                     action_str = state.action_to_string(pyspiel.PlayerId.CHANCE, action)
@@ -77,7 +79,7 @@ if __name__ == '__main__':
     parser.add_argument("--iters", type=int, default=1)
     args = parser.parse_args()
     game: WizardGame = pyspiel.load_game('python_wizard')
-    bot_policy = UniformRandomPolicy(game)
+    bot_policy = get_action_fn_from_policy(UniformRandomPolicy(game))
     if args.policy_file is not None: 
         with open(args.policy_file, 'rb') as f:
             bot_policy = pickle.load(f).tabular_average_policy()
