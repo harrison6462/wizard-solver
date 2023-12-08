@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from wizard import WizardGame, WizardObserver, WizardState, card_to_action
 from open_spiel.python.policy import Policy, UniformRandomPolicy
 from open_spiel.python.algorithms.cfr import CFRPlusSolver
@@ -48,10 +50,12 @@ def main(action_fns: list, iters):
                 if state.is_chance_node():
                     #randomly sample a chance outcome
                     #change this to generating a random int and call the function you should cal (ask me about this gil)
-                    actions, probs = zip(*state.chance_outcomes())
-                    action = np.random.choice(actions, p=probs)
+                    # actions, probs = zip(*state.chance_outcomes())
+                    # action = np.random.choice(actions, p=probs)
+                    action = np.random.choice(len(state.chance_outcomes()))
+                    print(action)
                     action_str = state.action_to_string(pyspiel.PlayerId.CHANCE, action)
-                    #print("Sampled action: ", action_str)
+                    print("Sampled action: ", action_str)
                 else:
                 # print('State: ' + str(state)+'\n\n')
                     

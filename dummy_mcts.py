@@ -17,7 +17,7 @@
 This test mimics the basic C++ tests in algorithms/is_mcts_test.cc.
 """
 # pylint: disable=g-unreachable-test-method
-
+from __future__ import annotations
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
