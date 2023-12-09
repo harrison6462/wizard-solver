@@ -25,6 +25,8 @@ import time
 
 import wizard
 
+import new_wizard_abstracted
+
 FLAGS = flags.FLAGS
 
 flags.DEFINE_enum("solver", "cfrplus", ["cfr", "cfrplus", "cfrbr"], "CFR solver")
@@ -48,7 +50,7 @@ def main(_):
   else:
     print("Unknown solver")
     sys.exit(0)
-  filename = "{}_10card_solver.pickle".format(FLAGS.solver)
+  filename = "cfrplus_14card_abstract.pickle".format(FLAGS.solver)
   # with open(filename, 'rb') as f:
   #   solver = pickle.load(f)
   e = time.time()
