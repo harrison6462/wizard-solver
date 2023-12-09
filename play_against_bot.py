@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from wizard import WizardGame, WizardObserver, WizardState, card_to_action
-import new_wizard_abstracted
 from open_spiel.python.policy import Policy, TabularPolicy, UniformRandomPolicy
+from wizard import WizardGame, WizardObserver, WizardState, card_to_action, _NUM_PLAYERS, max_chance_actions
+import abstracted_wizard
+
 from open_spiel.python.algorithms.cfr import CFRPlusSolver
 import numpy as np
 import pickle
@@ -14,6 +15,13 @@ import wizard
 
 def get_action_from_user(state: WizardState, player_id) -> int:
     legal_actions = state._legal_actions(player_id)
+    
+    print("My hand: ", state.player_hands[player_id])
+    
+    print("Trump: ", state.trump_card)
+    print("Predictions: ", state.predictions)
+    print("Past actions: ", state.previous_tricks)
+    print("Action this round: ", state.current_round_cards)
     print(list(map(lambda a: f'{a}: {state._action_to_string(player_id, a)}', legal_actions)))
     while True:
         try:
@@ -40,9 +48,9 @@ def abstracted_fn_from_policy(abstract_policy: Policy):
         then map to this state, mixing between any cards which fall under the chosen bucket randomly
     '''
     def get_action_from_state(state: WizardState, player_id: int):
-        abstracted_state = new_wizard_abstracted.map_wizard_state_to_abstracted_wizard_state(state)
+        abstracted_state = wizard_abstracted.map_wizard_state_to_abstracted_wizard_state(state)
         abstract_action = abstract_action_fn(abstracted_state, player_id)
-        return new_wizard_abstracted.map_abstract_action_to_wizard_action(state, abstract_action)
+        return wizard_abstracted.map_abstract_action_to_wizard_action(state, abstract_action)
     
     return get_action_from_state
 
@@ -55,8 +63,10 @@ def main(action_fns: list, iters):
     game: WizardGame = pyspiel.load_game('python_wizard')
     i = 0
     while i < iters:
+    for i in range(iters):
         try:
             state = game.new_initial_state()
+
             while not state.is_terminal():
                 if state.is_chance_node():
                     #randomly sample a chance outcome
@@ -65,11 +75,10 @@ def main(action_fns: list, iters):
                     # action = np.random.choice(actions, p=probs)
                     action = np.random.choice(list(map(lambda a: a[0], state.chance_outcomes())))
                     action_str = state.action_to_string(pyspiel.PlayerId.CHANCE, action)
-                    # print("Sampled action: ", action_str)
                 else:
                 # print('State: ' + str(state)+'\n\n')
                     action = action_fns[state._next_player](state, state._next_player)
-                # print(f'Playing action: {state._action_to_string(state._next_player, action)}')
+                #print(f'Playing action: {state._action_to_string(state._next_player, action)}')
                 state._apply_action(action)
             points = state.returns()
             print(f'Game terminated with payouts: {points}')
@@ -80,9 +89,8 @@ def main(action_fns: list, iters):
             elif points[0] == 0:
                 num_draws +=1
             i += 1
-        except:
-            print('EPIC FAIL')
-            pass
+        except Exception as E:
+            print(E)
     return points_diff/(iters * 1.0), num_wins/(iters * 1.0), num_draws/(iters * 1.0)
 if __name__ == '__main__':
     import argparse

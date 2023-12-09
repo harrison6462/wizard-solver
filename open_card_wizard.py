@@ -67,10 +67,10 @@ BetAction = int
 CardAction = Card
 
 _NUM_PLAYERS = 2
-_NUM_CARDS_PER_PLAYER = 2
+_NUM_CARDS_PER_PLAYER = 4
 #wizards / jesters will have club/diamond/heart/spade variety - these will have no impact
 #_DECK = frozenset(map(lambda face_and_suit: Card(*face_and_suit), itertools.product(faces, suits)))
-_DECK = frozenset(map(lambda face_and_suit: Card(*face_and_suit), itertools.product([Face.JESTER,  Face.KING,Face.ACE, Face.WIZARD], [Suit.CLUB, Suit.DIAMOND])))
+_DECK = frozenset(map(lambda face_and_suit: Card(*face_and_suit), itertools.product([Face.JESTER, Face.NINE, Face.TEN, Face.JACK, Face.QUEEN, Face.KING,Face.ACE, Face.WIZARD], [ Suit.HEART, Suit.CLUB, Suit.DIAMOND])))
 #TODO this is an important function, perhaps more attention should be drawn to it
 # def card_to_int(card: Card) -> int:
 #   '''Gives a numbering of the cards that is bijective in [0, ... len(_DECK)). The order is arbitrary
@@ -195,12 +195,13 @@ class OpenWizardState(pyspiel.State):
           self._next_player = highest_num_idx
           self.who_started_tricks.append(self._next_player)
     else:
-        action = int_to_card(action-(_NUM_CARDS_PER_PLAYER+1))
+        act = int_to_card(action-(_NUM_CARDS_PER_PLAYER+1))
         
         try:
-            assert action in self.player_hands[self._next_player]
+            assert act in self.player_hands[self._next_player]
         except: 
           breakpoint()
+        action = act
         self.player_hands[self._next_player].remove(action)
         #we can know for sure that this was a valid card
         cmp = get_cmp_from_trump_and_initial_suit(self.trump_card.suit if self.trump_card is not None else None, self.current_lead_suit)

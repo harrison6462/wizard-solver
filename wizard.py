@@ -183,6 +183,7 @@ _NUM_CARDS_PER_PLAYER = 2
 #_DECK = frozenset(map(lambda face_and_suit: Card(*face_and_suit), itertools.product(faces, suits)))
 _FACES_IN_DECK = [Face.JESTER, Face.QUEEN, Face.KING, Face.ACE, Face.WIZARD]
 _SUITS_IN_DECK = [Suit.CLUB, Suit.DIAMOND]
+
 _DECK = frozenset(map(lambda face_and_suit: Card(*face_and_suit), itertools.product(_FACES_IN_DECK, _SUITS_IN_DECK)))
 # all_possible_hands = generate_all_possible_hands(_NUM_PLAYERS, _NUM_CARDS_PER_PLAYER, _DECK) #TODO this could be made wayyyyyyyyyyy more efficient by knowing how to correspond an int to a combo
 #TODO this is an important function, perhaps more attention should be drawn to it
