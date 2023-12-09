@@ -167,7 +167,7 @@ def generate_all_possible_hands( num_cards_per_player: list[int], deck: Deck):
   
   assert sum(num_cards_per_player) <= len(deck)
   all_choices = map(lambda s: [set(s)], combinations(deck, num_cards_per_player[0]))
-  for i in range(1, num_players):
+  for i in range(1, len(num_cards_per_player)):
     new_all_choices = []
     for choice in all_choices:
       all_cards_in_choice = set().union(*map(lambda s: set(s), choice))
@@ -181,11 +181,11 @@ BetAction = int
 CardAction = Card
 
 _NUM_PLAYERS = 2
-_NUM_CARDS_PER_PLAYER = 2
+_NUM_CARDS_PER_PLAYER = 4
 #wizards / jesters will have club/diamond/heart/spade variety - these will have no impact
 #_DECK = frozenset(map(lambda face_and_suit: Card(*face_and_suit), itertools.product(faces, suits)))
-_FACES_IN_DECK = [Face.JESTER, Face.ACE, Face.WIZARD]
-_SUITS_IN_DECK = [Suit.CLUB, Suit.DIAMOND]
+_FACES_IN_DECK = [Face.JESTER,  Face.NINE, Face.TEN, Face.JACK, Face.QUEEN, Face.KING, Face.ACE, Face.WIZARD]
+_SUITS_IN_DECK = [ Suit.HEART, Suit.CLUB, Suit.DIAMOND]
 _DECK = frozenset(map(lambda face_and_suit: Card(*face_and_suit), itertools.product(_FACES_IN_DECK, _SUITS_IN_DECK)))
 # all_possible_hands = generate_all_possible_hands(_NUM_PLAYERS, _NUM_CARDS_PER_PLAYER, _DECK) #TODO this could be made wayyyyyyyyyyy more efficient by knowing how to correspond an int to a combo
 #TODO this is an important function, perhaps more attention should be drawn to it

@@ -44,51 +44,60 @@ def is_valid_move_all_hand(preceeding_card: Card | None, card: Card, hand: Hand)
                             or card.suit == preceeding_card.suit \
                             or not has_card_of_suit(hand, preceeding_card.suit))
 
-def get_all_hands_consistent_with_observations(state, player_cards_to_see: set = set()) -> list[list[Hand]]:
-    '''Returns all possible hands the player can have from deck consistent with
-    the observations (ie., if the lead suit is clubs and they play a non-wizard/jester
-    non-club then they cannot have clubs).
-    This is to be able to compute all possible histories as required by subgame solving.
-    In fancier words, this is returning the common knowledge closure of the given state,
-    as defined in https://proceedings.neurips.cc/paper/2021/file/c96c08f8bb7960e11a1239352a479053-Paper.pdf
-    '''
-    all_exposed_cards = state.get_all_exposed_cards(player_cards_to_see)
-    player_card_amounts = [len(hand) for i, hand in enumerate(state.player_hands) if i not in player_cards_to_see]
-    all_possible_hands = generate_all_possible_hands(player_card_amounts, state.Deck - all_exposed_cards)
-    # if perspective_player == opp_player: return state.player_hands[perspective_player]
-    #otherwise, the other players can have all possible combinations of unexposed cards from the deck remaining
-    valid_hand_combinations = []
+
+
+def gen_hand(card_pool, player_card_amounts):
+    num = 0
+    for val in player_card_amounts:
+        num += val 
+    sample = random.sample(list(card_pool), num)
+    hands = []
+    idx = 0
+    for val in player_card_amounts:
+        hands.append(sample[idx:idx+val])
+        idx += val
+    return hands
+
+
+def valid_hand(state, hands):
+    played_so_far: list[set[Card]] = [set() for _ in range(_NUM_PLAYERS)]
     valid = True
-    
-    for hands in all_possible_hands:
-        for player in sorted(player_cards_to_see): 
-            hands.insert(player, state.player_hands[player])
+    for round in range(len(state.previous_tricks)):  
+        for player in range(state.who_started_tricks[round], state.who_started_tricks[round] + _NUM_PLAYERS):
+            curr = player % _NUM_PLAYERS
+           # print(type(hands[curr]))
+           # print(type(played_so_far[curr]))
+            if not is_valid_move_all_hand(state.previous_tricks[round][0], state.previous_tricks[round][curr], set(hands[curr]) - played_so_far[curr]): 
+                return False
+            played_so_far[curr].add(state.previous_tricks[round][curr])
+    return True
         
-        played_so_far: list[set[Card]] = [set() for _ in range(_NUM_PLAYERS)]
-        valid = True
-        for round in range(len(state.previous_tricks)):
-            try:
-                
-                for player in range(state.who_started_tricks[round], state.who_started_tricks[round] + _NUM_PLAYERS):
-                    curr = player % _NUM_PLAYERS
-                    if not is_valid_move_all_hand(state.previous_tricks[round][0], state.previous_tricks[round][curr], hands[curr] - played_so_far[curr]): 
-                        valid = False
-                    played_so_far[curr].add(state.previous_tricks[round][curr])
-            except:
-                breakpoint()
-        if valid: 
-
-            valid_hand_combinations.append(hands)
-    return valid_hand_combinations
-
+class hand_sampling(Exception):
+    pass
 
 
 def sample(state, player_id, num_samples):
+    
     player_cards_to_see = {player_id}
-    all_possible_hands = get_all_hands_consistent_with_observations(state,player_cards_to_see)
-    weights = [1 for i in range(len(all_possible_hands))]
-  
-    return random.choices(all_possible_hands,weights, k=num_samples)
+    out = []
+    player_card_amounts = [len(hand) for i, hand in enumerate(state.player_hands) if i not in player_cards_to_see]
+    all_exposed_cards = state.get_all_exposed_cards(player_cards_to_see)
+    card_pool = state.Deck - all_exposed_cards
+    count = 0
+    while(len(out) != num_samples):
+        hand = gen_hand(card_pool, player_card_amounts)
+        for player in sorted(player_cards_to_see): 
+            hand.insert(player, list(deepcopy(state.player_hands[player])))
+        if valid_hand(state, hand):
+            out.append(hand)
+        count += 1
+        if(count == 1000):
+            print("taking too long to find hands")
+            raise hand_sampling
+            
+    #breakpoint()
+   
+    return out
 
 
 def do_action(state , player_id):
@@ -121,7 +130,7 @@ def do_action(state , player_id):
             solve=True,
             verbose=False)
        
-
+      
         action_to_take = bot.step(dummy_game)
        
         if action_to_take in actions:

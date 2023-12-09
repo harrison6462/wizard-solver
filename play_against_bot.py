@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from wizard import WizardGame, WizardObserver, WizardState, card_to_action
+from wizard import WizardGame, WizardObserver, WizardState, card_to_action, _NUM_PLAYERS, max_chance_actions
 from open_spiel.python.policy import Policy, UniformRandomPolicy
 from open_spiel.python.algorithms.cfr import CFRPlusSolver
 import numpy as np
@@ -13,6 +13,13 @@ from dummy_mcts import *
 
 def get_action_from_user(state: WizardState, player_id) -> int:
     legal_actions = state._legal_actions(player_id)
+    
+    print("My hand: ", state.player_hands[player_id])
+    
+    print("Trump: ", state.trump_card)
+    print("Predictions: ", state.predictions)
+    print("Past actions: ", state.previous_tricks)
+    print("Action this round: ", state.current_round_cards)
     print(list(map(lambda a: f'{a}: {state._action_to_string(player_id, a)}', legal_actions)))
     while True:
         try:
@@ -42,10 +49,12 @@ def main(action_fns: list, iters):
     points_diff = 0
     num_wins = 0
     num_draws = 0 
+    
     for i in range(iters):
         try:
             game: WizardGame = pyspiel.load_game('python_wizard')
             state = game.new_initial_state()
+
             while not state.is_terminal():
                 if state.is_chance_node():
                     #randomly sample a chance outcome
@@ -53,14 +62,16 @@ def main(action_fns: list, iters):
                     # actions, probs = zip(*state.chance_outcomes())
                     # action = np.random.choice(actions, p=probs)
                     action = np.random.choice(len(state.chance_outcomes()))
+                    if(len(state.initial_player_hands) == _NUM_PLAYERS):
+                        action = state.chance_outcomes()[action][0]
                     print(action)
-                    action_str = state.action_to_string(pyspiel.PlayerId.CHANCE, action)
-                    print("Sampled action: ", action_str)
+                    #action_str = state.action_to_string(pyspiel.PlayerId.CHANCE, action)
+                    #print("Sampled action: ", action_str)
                 else:
                 # print('State: ' + str(state)+'\n\n')
                     
                     action = action_fns[state._next_player](state, state._next_player)
-                # print(f'Playing action: {state._action_to_string(state._next_player, action)}')
+                #print(f'Playing action: {state._action_to_string(state._next_player, action)}')
                 state._apply_action(action)
             points = state.returns()
             print(f'Game terminated with payouts: {points}')
@@ -71,7 +82,6 @@ def main(action_fns: list, iters):
             elif points[0] == 0:
                 num_draws +=1
         except Exception as E:
-            print('ooi')
             print(E)
     return points_diff/(iters * 1.0), num_wins/(iters * 1.0), num_draws/(iters * 1.0)
 if __name__ == '__main__':
